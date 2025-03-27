@@ -110,7 +110,7 @@ const exportVideo = async () => {
     // 首先，創建一個視頻元素來播放原始視頻
     const videoElement = document.createElement("video");
     videoElement.src = URL.createObjectURL(props.videoFile);
-    videoElement.muted = true; // 避免瀏覽器阻止自動播放
+    videoElement.muted = false; // 取消靜音以捕獲音頻
 
     // 加載元數據時特別處理
     let metadataLoaded = false;
@@ -155,6 +155,12 @@ const exportVideo = async () => {
     // 設置畫布尺寸與視頻尺寸相同
     canvas.width = videoElement.videoWidth || 640; // 預設寬度
     canvas.height = videoElement.videoHeight || 360; // 預設高度
+
+    // 創建音頻上下文
+    const audioContext = new AudioContext();
+    const audioSource = audioContext.createMediaElementSource(videoElement);
+    const audioDestination = audioContext.createMediaStreamDestination();
+    audioSource.connect(audioDestination);
 
     // 檢查MediaRecorder支持
     if (!window.MediaRecorder) {
@@ -204,18 +210,22 @@ const exportVideo = async () => {
       recorderOptions.mimeType = selectedMimeType;
     }
 
-    // 使用 MediaRecorder 來捕獲畫布內容
-    const stream = canvas.captureStream(30); // 30fps
+    // 合併視頻和音頻流
+    const videoStream = canvas.captureStream(30); // 30fps
+    const combinedStream = new MediaStream([
+      ...videoStream.getVideoTracks(),
+      ...audioDestination.stream.getAudioTracks(),
+    ]);
 
     let mediaRecorder: MediaRecorder;
     try {
-      mediaRecorder = new MediaRecorder(stream, recorderOptions);
+      mediaRecorder = new MediaRecorder(combinedStream, recorderOptions);
     } catch (e) {
       console.error("創建MediaRecorder失敗:", e);
 
       // 嘗試創建沒有指定MIME類型的MediaRecorder
       try {
-        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder = new MediaRecorder(combinedStream);
       } catch (fallbackError) {
         throw new Error("瀏覽器不支持視頻錄製功能，請嘗試其他瀏覽器");
       }
